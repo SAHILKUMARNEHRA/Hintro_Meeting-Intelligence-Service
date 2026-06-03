@@ -26,8 +26,8 @@ const env = {
 
   REMINDER_JOB_ENABLED: optional('REMINDER_JOB_ENABLED', 'true') === 'true',
 
-  EVALUATION_CANDIDATE_NAME: optional('EVALUATION_CANDIDATE_NAME', ''),
-  EVALUATION_EMAIL: optional('EVALUATION_EMAIL', ''),
+  EVALUATION_CANDIDATE_NAME: optional('EVALUATION_CANDIDATE_NAME', 'Sahil Kumar'),
+  EVALUATION_EMAIL: optional('EVALUATION_EMAIL', 'sahil.kumar01@adypu.edu.in'),
   EVALUATION_REPOSITORY_URL: optional(
     'EVALUATION_REPOSITORY_URL',
     'https://github.com/SAHILKUMARNEHRA/Hintro_Meeting-Intelligence-Service',
