@@ -1,0 +1,33 @@
+## Assignment Checklist
+
+- [x] Node.js + Express backend
+- [x] PostgreSQL with Prisma ORM
+- [x] Authentication: register/login with JWT
+- [x] Protect all API routes with auth (except auth, health, evaluation, swagger)
+- [x] Meeting management: create meeting with transcript
+- [x] Meeting management: list meetings with pagination
+- [x] Meeting management: get single meeting
+- [x] AI analysis via Groq llama3-8b-8192
+- [x] AI insights always include timestamp citations
+- [x] Hallucination prevention via prompt + output validation
+- [x] Action item management: create manually
+- [x] Action item management: update status
+- [x] Action item management: list with filters
+- [x] Overdue action item detection endpoint
+- [x] Scheduled reminder job (hourly)
+- [x] Telegram reminders
+- [x] Reminder history stored in DB
+- [x] Unified response format (success/error) with traceId
+- [x] Trace ID included in logs and responses
+- [x] Structured request logging
+- [x] Input validation with meaningful errors
+- [x] Global error handling
+- [x] Swagger docs at /api-docs
+- [x] GET /health
+- [x] GET /api/evaluation
+- [x] Rate limiting
+- [x] Unit tests (Jest) for meetings and action items
+- [x] CI pipeline (GitHub Actions)
+- [x] Dockerfile + docker-compose.yml
+- [x] Documentation files in /docs
+

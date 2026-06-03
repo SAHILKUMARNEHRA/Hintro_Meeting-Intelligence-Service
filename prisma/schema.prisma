@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ActionItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ActionItemSource {
+  AI
+  MANUAL
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  meetings     Meeting[]
+  actionItems  ActionItem[] @relation("CreatedActionItems")
+}
+
+model Meeting {
+  id         String      @id @default(uuid())
+  title      String
+  happenedAt DateTime?
+  transcript Json
+  createdAt  DateTime    @default(now())
+
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+
+  analysis   Analysis?
+  actionItems ActionItem[]
+}
+
+model Analysis {
+  id        String   @id @default(uuid())
+  meetingId String   @unique
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  summary    String
+  decisions  Json
+  followUps  Json
+
+  createdAt DateTime @default(now())
+}
+
+model ActionItem {
+  id          String           @id @default(uuid())
+  meetingId   String
+  meeting     Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  task        String
+  assignee    String
+  dueDate     DateTime?
+  status      ActionItemStatus @default(PENDING)
+  source      ActionItemSource @default(MANUAL)
+  citations   Json?
+
+  createdAt   DateTime @default(now())
+
+  createdByUserId String?
+  createdByUser   User? @relation("CreatedActionItems", fields: [createdByUserId], references: [id])
+
+  reminders ReminderHistory[]
+}
+
+model ReminderHistory {
+  id           String     @id @default(uuid())
+  actionItemId String
+  actionItem   ActionItem @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+
+  sentAt       DateTime   @default(now())
+  telegramChatId String
+  message      String
+}
+
