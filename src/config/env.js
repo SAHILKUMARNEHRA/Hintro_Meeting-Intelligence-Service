@@ -21,6 +21,7 @@ const env = {
   DATABASE_URL: optional('DATABASE_URL'),
   JWT_SECRET: optional('JWT_SECRET'),
   GROQ_API_KEY: optional('GROQ_API_KEY'),
+  GROQ_MODEL: optional('GROQ_MODEL', 'llama3-8b-8192'),
   TELEGRAM_BOT_TOKEN: optional('TELEGRAM_BOT_TOKEN'),
   TELEGRAM_CHAT_ID: optional('TELEGRAM_CHAT_ID'),
 

@@ -58,33 +58,93 @@ async function callGroq({ prompt }) {
   const apiKey = env.required('GROQ_API_KEY');
   const url = 'https://api.groq.com/openai/v1/chat/completions';
 
-  const response = await axios.post(
-    url,
-    {
-      model: 'llama3-8b-8192',
-      temperature: 0,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details.',
-        },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-    },
-    {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      timeout: 30000,
-    },
-  );
+  let response;
+  try {
+    const model = env.GROQ_MODEL || 'llama3-8b-8192';
+    response = await axios.post(
+      url,
+      {
+        model,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      },
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        timeout: 30000,
+      },
+    );
+  } catch (err) {
+    const status = err?.response?.status;
+    const code = err?.response?.data?.error?.code || err?.response?.data?.code;
+    const message =
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Groq request failed';
+    const isDecommissioned =
+      String(code || '').toLowerCase().includes('decommissioned') ||
+      String(message).toLowerCase().includes('decommissioned');
+
+    if (status === 400 && isDecommissioned) {
+      try {
+        response = await axios.post(
+          url,
+          {
+            model: 'llama-3.1-8b-instant',
+            temperature: 0,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details.',
+              },
+              { role: 'user', content: prompt },
+            ],
+          },
+          {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 30000,
+          },
+        );
+      } catch (retryErr) {
+        const retryStatus = retryErr?.response?.status;
+        const retryMessage =
+          retryErr?.response?.data?.error?.message ||
+          retryErr?.response?.data?.message ||
+          retryErr?.message ||
+          'Groq request failed';
+        throw new AppError(
+          'AI_ERROR',
+          `Groq request failed (${retryStatus ?? 'unknown'}): ${retryMessage}`,
+          502,
+        );
+      }
+    } else {
+      throw new AppError(
+        'AI_ERROR',
+        `Groq request failed (${status ?? 'unknown'}): ${message}`,
+        502,
+      );
+    }
+  }
 
   const content = response.data?.choices?.[0]?.message?.content;
   if (!content) throw new AppError('AI_ERROR', 'Empty AI response', 502);
 
   let parsed;
   try {
-    parsed = JSON.parse(content);
+    const raw = String(content).trim();
+    const candidate = raw.startsWith('{')
+      ? raw
+      : raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+    parsed = JSON.parse(candidate);
   } catch (err) {
     throw new AppError('AI_ERROR', 'AI returned non-JSON output', 502);
   }
@@ -180,4 +240,3 @@ async function analyzeMeeting(userId, meetingId) {
 }
 
 module.exports = { analyzeMeeting };
-
