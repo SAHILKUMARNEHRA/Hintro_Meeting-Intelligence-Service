@@ -31,6 +31,8 @@ const listSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+router.get('/:id/debug', validateParams(idParamsSchema), controller.debugGetById);
+
 router.use(authMiddleware);
 
 router.get('/overdue', controller.listOverdue);
@@ -39,4 +41,3 @@ router.patch('/:id/status', validateParams(idParamsSchema), validateBody(statusS
 router.get('/', validateQuery(listSchema), controller.listActionItems);
 
 module.exports = router;
-
