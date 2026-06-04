@@ -1,6 +1,5 @@
 const { getPrisma } = require('../../config/db');
 const { AppError } = require('../../middleware/errorHandler');
-const { log } = require('../../utils/logger');
 
 async function ensureMeetingOwned(tx, userId, meetingId) {
   const meeting = await tx.meeting.findFirst({
@@ -34,19 +33,6 @@ async function updateStatus(userId, actionItemId, status) {
   const existing = await prisma.actionItem.findUnique({
     where: { id: actionItemId },
   });
-  log('info', {
-    traceId: 'actionItem.updateStatus.debug',
-    actionItemId,
-    existing: existing
-      ? {
-          id: existing.id,
-          meetingId: existing.meetingId,
-          source: existing.source,
-          status: existing.status,
-          createdByUserId: existing.createdByUserId,
-        }
-      : null,
-  });
   if (!existing) throw new AppError('NOT_FOUND', 'Action item not found', 404);
 
   const updated = await prisma.actionItem.update({
@@ -55,14 +41,6 @@ async function updateStatus(userId, actionItemId, status) {
   });
 
   return updated;
-}
-
-async function debugFindById(actionItemId) {
-  const prisma = getPrisma();
-  const item = await prisma.actionItem.findUnique({
-    where: { id: actionItemId },
-  });
-  return item;
 }
 
 async function listActionItems(userId, { status, assignee, meetingId, page, pageSize }) {
@@ -138,7 +116,6 @@ async function listOverdueForReminders() {
 module.exports = {
   createActionItem,
   updateStatus,
-  debugFindById,
   listActionItems,
   listOverdue,
   listOverdueForReminders,
