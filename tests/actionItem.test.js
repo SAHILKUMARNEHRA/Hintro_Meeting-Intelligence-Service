@@ -92,4 +92,24 @@ describe('Action Items', () => {
       .expect(200);
     expect(listByMeeting.body.data.items.length).toBeGreaterThanOrEqual(1);
   });
+
+  test('gets a single action item', async () => {
+    const { token } = await authUser();
+    const meetingId = await createMeeting(token);
+
+    const createRes = await request(app)
+      .post('/api/action-items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetingId, task: 'Send update', assignee: 'Sahil' })
+      .expect(201);
+
+    const itemId = createRes.body.data.actionItem.id;
+
+    const getRes = await request(app)
+      .get(`/api/action-items/${itemId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(getRes.body.data.actionItem.id).toBe(itemId);
+  });
 });

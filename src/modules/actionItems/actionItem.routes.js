@@ -33,9 +33,10 @@ const listSchema = z.object({
 
 router.use(authMiddleware);
 
+router.get('/', validateQuery(listSchema), controller.listActionItems);
 router.get('/overdue', controller.listOverdue);
 router.post('/', validateBody(createSchema), controller.createActionItem);
 router.patch('/:id/status', validateParams(idParamsSchema), validateBody(statusSchema), controller.updateStatus);
-router.get('/', validateQuery(listSchema), controller.listActionItems);
+router.get('/:id', validateParams(idParamsSchema), controller.getActionItem);
 
 module.exports = router;

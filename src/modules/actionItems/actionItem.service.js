@@ -43,6 +43,15 @@ async function updateStatus(userId, actionItemId, status) {
   return updated;
 }
 
+async function getActionItem(userId, actionItemId) {
+  const prisma = getPrisma();
+  const item = await prisma.actionItem.findFirst({
+    where: { id: actionItemId, meeting: { userId } },
+  });
+  if (!item) throw new AppError('NOT_FOUND', 'Action item not found', 404);
+  return item;
+}
+
 async function listActionItems(userId, { status, assignee, meetingId, page, pageSize }) {
   const prisma = getPrisma();
   const where = {};
@@ -116,6 +125,7 @@ async function listOverdueForReminders() {
 module.exports = {
   createActionItem,
   updateStatus,
+  getActionItem,
   listActionItems,
   listOverdue,
   listOverdueForReminders,

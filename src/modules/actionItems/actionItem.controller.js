@@ -22,4 +22,9 @@ const listOverdue = asyncHandler(async (req, res) => {
   return ok(res, { items });
 });
 
-module.exports = { createActionItem, updateStatus, listActionItems, listOverdue };
+const getActionItem = asyncHandler(async (req, res) => {
+  const item = await service.getActionItem(req.user.id, req.params.id);
+  return ok(res, { actionItem: item });
+});
+
+module.exports = { createActionItem, updateStatus, listActionItems, listOverdue, getActionItem };
