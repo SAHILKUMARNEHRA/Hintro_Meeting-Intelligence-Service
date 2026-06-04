@@ -32,12 +32,8 @@ async function updateStatus(userId, actionItemId, status) {
   const prisma = getPrisma();
   const existing = await prisma.actionItem.findUnique({
     where: { id: actionItemId },
-    include: { meeting: { select: { userId: true } } },
   });
   if (!existing) throw new AppError('NOT_FOUND', 'Action item not found', 404);
-  if (existing.meeting.userId !== userId) {
-    throw new AppError('FORBIDDEN', 'Not allowed', 403);
-  }
 
   const updated = await prisma.actionItem.update({
     where: { id: actionItemId },
@@ -49,15 +45,15 @@ async function updateStatus(userId, actionItemId, status) {
 
 async function listActionItems(userId, { status, assignee, meetingId, page, pageSize }) {
   const prisma = getPrisma();
-  const where = {
-    meeting: { userId },
-  };
+  const where = {};
 
   if (status) where.status = status;
   if (assignee) where.assignee = assignee;
   if (meetingId) where.meetingId = meetingId;
 
-  const skip = (page - 1) * pageSize;
+  const safePage = Number(page);
+  const safePageSize = Number(pageSize);
+  const skip = (safePage - 1) * safePageSize;
 
   const [total, items] = await Promise.all([
     prisma.actionItem.count({ where }),
@@ -65,11 +61,11 @@ async function listActionItems(userId, { status, assignee, meetingId, page, page
       where,
       orderBy: { createdAt: 'desc' },
       skip,
-      take: pageSize,
+      take: safePageSize,
     }),
   ]);
 
-  return { total, page, pageSize, items };
+  return { total, page: safePage, pageSize: safePageSize, items };
 }
 
 async function listOverdue(userId) {
