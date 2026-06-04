@@ -10,6 +10,11 @@ const insightSchema = z.object({
   citations: z.array(z.string().min(1)).min(1),
 });
 
+const dueDateSchema = z.union([
+  z.string().datetime(),
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+]);
+
 const aiOutputSchema = z.object({
   summary: z.string().min(1),
   decisions: z.array(insightSchema),
@@ -18,7 +23,7 @@ const aiOutputSchema = z.object({
     z.object({
       task: z.string().min(1),
       assignee: z.string().min(1),
-      dueDate: z.string().datetime().optional(),
+      dueDate: dueDateSchema.optional(),
       citations: z.array(z.string().min(1)).min(1),
     }),
   ),
@@ -54,107 +59,148 @@ function validateCitations(transcript, output) {
   }
 }
 
+function sanitizeModelJson(rawContent) {
+  let s = String(rawContent || '');
+  s = s.replace(/```json/gi, '```');
+  s = s.replace(/```/g, '');
+  s = s.trim();
+
+  if (!s) return s;
+  if (s.startsWith('{') && s.endsWith('}')) return s;
+
+  const first = s.indexOf('{');
+  const last = s.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    return s.slice(first, last + 1);
+  }
+
+  return s;
+}
+
+function normalizeParsedOutput(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+
+  const out = { ...parsed };
+
+  if (!Array.isArray(out.decisions)) out.decisions = [];
+  if (!Array.isArray(out.followUps)) out.followUps = [];
+  if (!Array.isArray(out.actionItems)) out.actionItems = [];
+
+  out.actionItems = out.actionItems.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const next = { ...item };
+
+    if (
+      typeof next.dueDate !== 'string' ||
+      next.dueDate.trim() === '' ||
+      Number.isNaN(Date.parse(next.dueDate))
+    ) {
+      delete next.dueDate;
+    }
+
+    return next;
+  });
+
+  return out;
+}
+
+function buildRequestPayload(model, prompt) {
+  return {
+    model,
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details. You must respond with ONLY raw JSON that parses with JSON.parse. Do not use markdown, code fences, backticks, or any explanatory text.',
+      },
+      { role: 'user', content: prompt },
+    ],
+  };
+}
+
+async function postGroq({ model, prompt, apiKey }) {
+  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  return axios.post(url, buildRequestPayload(model, prompt), {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    timeout: 30000,
+  });
+}
+
 async function callGroq({ prompt }) {
   const apiKey = env.required('GROQ_API_KEY');
-  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  const preferredModel = env.GROQ_MODEL || 'llama3-8b-8192';
 
-  let response;
-  try {
-    const model = env.GROQ_MODEL || 'llama3-8b-8192';
-    response = await axios.post(
-      url,
-      {
-        model,
-        temperature: 0,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details.',
-          },
-          { role: 'user', content: prompt },
-        ],
-      },
-      {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        timeout: 30000,
-      },
-    );
-  } catch (err) {
-    const status = err?.response?.status;
-    const code = err?.response?.data?.error?.code || err?.response?.data?.code;
-    const message =
-      err?.response?.data?.error?.message ||
-      err?.response?.data?.message ||
-      err?.message ||
-      'Groq request failed';
-    const isDecommissioned =
-      String(code || '').toLowerCase().includes('decommissioned') ||
-      String(message).toLowerCase().includes('decommissioned');
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let response;
+    try {
+      response = await postGroq({ model: preferredModel, prompt, apiKey });
+    } catch (err) {
+      const status = err?.response?.status;
+      const code = err?.response?.data?.error?.code || err?.response?.data?.code;
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Groq request failed';
 
-    if (status === 400 && isDecommissioned) {
-      try {
-        response = await axios.post(
-          url,
-          {
+      const isDecommissioned =
+        String(code || '').toLowerCase().includes('decommissioned') ||
+        String(message).toLowerCase().includes('decommissioned');
+
+      if (status === 400 && isDecommissioned) {
+        try {
+          response = await postGroq({
             model: 'llama-3.1-8b-instant',
-            temperature: 0,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are an accurate meeting analyst. You must only use the provided transcript lines. If something is not explicitly present, omit it. You must never invent details.',
-              },
-              { role: 'user', content: prompt },
-            ],
-          },
-          {
-            headers: { Authorization: `Bearer ${apiKey}` },
-            timeout: 30000,
-          },
-        );
-      } catch (retryErr) {
-        const retryStatus = retryErr?.response?.status;
-        const retryMessage =
-          retryErr?.response?.data?.error?.message ||
-          retryErr?.response?.data?.message ||
-          retryErr?.message ||
-          'Groq request failed';
-        throw new AppError(
-          'AI_ERROR',
-          `Groq request failed (${retryStatus ?? 'unknown'}): ${retryMessage}`,
-          502,
-        );
+            prompt,
+            apiKey,
+          });
+        } catch (retryErr) {
+          lastError = retryErr;
+          break;
+        }
+      } else {
+        lastError = err;
+        break;
       }
-    } else {
-      throw new AppError(
-        'AI_ERROR',
-        `Groq request failed (${status ?? 'unknown'}): ${message}`,
-        502,
-      );
     }
+
+    const content = response?.data?.choices?.[0]?.message?.content;
+    if (!content) {
+      lastError = new AppError('AI_ERROR', 'Empty AI response', 502);
+      continue;
+    }
+
+    let parsed;
+    try {
+      const cleaned = sanitizeModelJson(content);
+      parsed = normalizeParsedOutput(JSON.parse(cleaned));
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+
+    const validated = aiOutputSchema.safeParse(parsed);
+    if (!validated.success) {
+      lastError = validated.error;
+      continue;
+    }
+
+    return validated.data;
   }
 
-  const content = response.data?.choices?.[0]?.message?.content;
-  if (!content) throw new AppError('AI_ERROR', 'Empty AI response', 502);
+  const status = lastError?.response?.status;
+  const message =
+    lastError?.response?.data?.error?.message ||
+    lastError?.response?.data?.message ||
+    lastError?.message ||
+    'Groq request failed';
 
-  let parsed;
-  try {
-    const raw = String(content).trim();
-    const candidate = raw.startsWith('{')
-      ? raw
-      : raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
-    parsed = JSON.parse(candidate);
-  } catch (err) {
-    throw new AppError('AI_ERROR', 'AI returned non-JSON output', 502);
+  if (status) {
+    throw new AppError('AI_ERROR', `Groq request failed (${status}): ${message}`, 502);
   }
-
-  const validated = aiOutputSchema.safeParse(parsed);
-  if (!validated.success) {
-    throw new AppError('AI_OUTPUT_INVALID', 'AI output did not match schema', 502);
-  }
-
-  return validated.data;
+  throw new AppError('AI_OUTPUT_INVALID', 'AI output did not match schema', 502);
 }
 
 async function analyzeMeeting(userId, meetingId) {
@@ -173,6 +219,15 @@ async function analyzeMeeting(userId, meetingId) {
   const allowedTimestamps = transcript.map((t) => t.timestamp).join(', ');
 
   const prompt = [
+    'Return ONLY a single raw JSON object.',
+    'Do NOT include markdown.',
+    'Do NOT include backticks.',
+    'Do NOT include code fences like ``` or ```json.',
+    'Do NOT include any explanation or preamble.',
+    'Do NOT include any trailing text after the JSON object.',
+    'The output must start with "{" and end with "}".',
+    'All keys must be present. If a list has no items, return an empty array.',
+    '',
     'Transcript (each line includes an authoritative timestamp in brackets):',
     transcriptText,
     '',
@@ -185,13 +240,16 @@ async function analyzeMeeting(userId, meetingId) {
     '  "summary": "string",',
     '  "decisions": [{"text":"string","citations":["mm:ss"]}],',
     '  "followUps": [{"text":"string","citations":["mm:ss"]}],',
-    '  "actionItems": [{"task":"string","assignee":"string","dueDate":"ISO-8601 optional","citations":["mm:ss"]}]',
+    '  "actionItems": [{"task":"string","assignee":"string","dueDate":"ISO-8601 date or datetime optional","citations":["mm:ss"]}]',
     '}',
     '',
     'Rules:',
     '- Use ONLY information from the transcript lines.',
+    '- "decisions", "followUps", and "actionItems" must always be arrays (possibly empty).',
     '- Every entry MUST include at least 1 citation timestamp from the allowed list.',
     '- Citations must be exact timestamp strings (e.g. "12:34").',
+    '- "assignee" must be a non-empty string. If unknown, use "Unassigned".',
+    '- "dueDate" must be an ISO-8601 date (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:mm:ssZ). If unknown, omit the field.',
     '- If an item cannot be supported by transcript content, omit it.',
     '- Do not include any extra keys.',
   ].join('\n');

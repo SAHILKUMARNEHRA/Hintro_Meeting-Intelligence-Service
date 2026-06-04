@@ -10,6 +10,7 @@ yarn-error.log*
 pnpm-debug.log*
 dist
 .prisma
+package-lock.json
 *.log
 .local-pgdata
 .local-pg.log
