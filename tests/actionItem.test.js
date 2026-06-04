@@ -57,5 +57,39 @@ describe('Action Items', () => {
 
     expect(overdueRes2.body.data.items.length).toBe(0);
   });
-});
 
+  test('lists action items with optional filters', async () => {
+    const { token } = await authUser();
+    const meetingId = await createMeeting(token);
+
+    await request(app)
+      .post('/api/action-items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ meetingId, task: 'Do thing', assignee: 'priya@hintro.com' })
+      .expect(201);
+
+    const listAll = await request(app)
+      .get('/api/action-items')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listAll.body.data.total).toBeGreaterThanOrEqual(1);
+
+    const listByAssignee = await request(app)
+      .get('/api/action-items?assignee=priya@hintro.com')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listByAssignee.body.data.items.length).toBeGreaterThanOrEqual(1);
+
+    const listByStatus = await request(app)
+      .get('/api/action-items?status=PENDING')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listByStatus.body.data.items.length).toBeGreaterThanOrEqual(1);
+
+    const listByMeeting = await request(app)
+      .get(`/api/action-items?meetingId=${meetingId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(listByMeeting.body.data.items.length).toBeGreaterThanOrEqual(1);
+  });
+});

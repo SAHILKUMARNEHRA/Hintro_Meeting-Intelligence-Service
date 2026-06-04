@@ -47,12 +47,27 @@ async function listActionItems(userId, { status, assignee, meetingId, page, page
   const prisma = getPrisma();
   const where = {};
 
-  if (status) where.status = status;
-  if (assignee) where.assignee = assignee;
-  if (meetingId) where.meetingId = meetingId;
+  const statusValue = Array.isArray(status) ? status[0] : status;
+  const assigneeValue = Array.isArray(assignee) ? assignee[0] : assignee;
+  const meetingIdValue = Array.isArray(meetingId) ? meetingId[0] : meetingId;
 
-  const safePage = Number(page);
-  const safePageSize = Number(pageSize);
+  if (typeof statusValue === 'string' && statusValue.trim()) where.status = statusValue.trim();
+  if (typeof assigneeValue === 'string' && assigneeValue.trim())
+    where.assignee = assigneeValue.trim();
+  if (typeof meetingIdValue === 'string' && meetingIdValue.trim())
+    where.meetingId = meetingIdValue.trim();
+
+  const rawPage = Array.isArray(page) ? page[0] : page;
+  const rawPageSize = Array.isArray(pageSize) ? pageSize[0] : pageSize;
+
+  const safePageNumber = Number(rawPage);
+  const safePageSizeNumber = Number(rawPageSize);
+
+  const safePage = Number.isFinite(safePageNumber) && safePageNumber >= 1 ? safePageNumber : 1;
+  const safePageSize =
+    Number.isFinite(safePageSizeNumber) && safePageSizeNumber >= 1 && safePageSizeNumber <= 100
+      ? safePageSizeNumber
+      : 20;
   const skip = (safePage - 1) * safePageSize;
 
   const [total, items] = await Promise.all([
